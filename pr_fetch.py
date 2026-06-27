@@ -33,6 +33,55 @@ from utils import (
     StrategyState,
 )
 
+# ── Lazy browser import ────────────────────────────────────────
+
+_BROWSER: Optional["playwright.sync_api.Browser"] = None
+
+
+def _get_browser():
+    global _BROWSER
+    if _BROWSER is None:
+        from playwright.sync_api import sync_playwright
+        p = sync_playwright().start()
+        _BROWSER = p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
+            ],
+        )
+    return _BROWSER
+
+
+def _close_browser():
+    global _BROWSER
+    if _BROWSER:
+        _BROWSER.close()
+        _BROWSER = None
+
+
+_QRATOR_PAGE: Optional["playwright.sync_api.Page"] = None
+
+
+def _ensure_qrator():
+    """Visit main page once per session to pass Qrator challenge."""
+    global _QRATOR_PAGE
+    if _QRATOR_PAGE is not None:
+        return
+    from playwright.sync_api import sync_playwright
+    browser = _get_browser()
+    ctx = browser.new_context(
+        viewport={"width": 1920, "height": 1080},
+        user_agent=CHROME_UA,
+    )
+    page = ctx.new_page()
+    page.goto("https://www.dns-shop.ru/", wait_until="load", timeout=30000)
+    import time
+    time.sleep(2)
+    _QRATOR_PAGE = page
+
 log = setup_logging("fetch")
 
 BASE = "https://www.dns-shop.ru"
@@ -80,6 +129,7 @@ class Strategy:
     impersonate: str
     proxy: str
     ua: str
+    transport: str = "curl"
 
     def headers(self, extra: Optional[dict] = None) -> dict:
         h = {
@@ -94,33 +144,43 @@ class Strategy:
     def proxies_arg(self):
         if self.proxy == "direct":
             return {"http": None, "https": None}
-        return None
+        if self.proxy == "tor":
+            return {
+                "http": "socks5://127.0.0.1:9050",
+                "https": "socks5://127.0.0.1:9050",
+            }
+        return None  # use env HTTPS_PROXY
 
 
 def _build_rotation(*specs) -> list[Strategy]:
-    """Build interleaved strategy list (same pattern as youthub)."""
-    pairs = []
-    for sid, imp, ua in specs:
-        pairs.append((
-            Strategy(f"{sid}-direct", imp, "direct", ua),
-            Strategy(f"{sid}-proxy", imp, "env", ua),
-        ))
+    """Build interleaved strategy list."""
     out = []
-    for i, (d, p) in enumerate(pairs):
-        out.append(d if i % 2 == 0 else p)
-    for i, (d, p) in enumerate(pairs):
-        out.append(p if i % 2 == 0 else d)
+    for sid, imp, ua in specs:
+        out.append(Strategy(f"{sid}-direct", imp, "direct", ua))
+        out.append(Strategy(f"{sid}-proxy",  imp, "env",    ua))
+        out.append(Strategy(f"{sid}-tor",   imp, "tor",    ua))
     return out
 
 
+CHROMIUM_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+)
+
 STRATEGIES = _build_rotation(
+    ("browser-chromium",       "chromium",          CHROMIUM_UA),
     ("cffi-chrome131",         "chrome131",         CHROME_UA),
+    ("browser-chromium2",      "chromium",          CHROME_UA),
     ("cffi-chrome145",         "chrome145",         CHROME145_UA),
     ("cffi-firefox133",        "firefox133",        FIREFOX_UA),
     ("cffi-safari184",         "safari184",         SAFARI_UA),
     ("cffi-chrome131_android", "chrome131_android", CHROME_ANDROID_UA),
     ("cffi-edge101",           "edge101",           EDGE_UA),
 )
+# Mark browser strategies
+for s in STRATEGIES:
+    if s.id.startswith("browser-"):
+        object.__setattr__(s, "transport", "browser")
 STRATEGIES_BY_ID = {s.id: s for s in STRATEGIES}
 STRATEGY_INDEX = {s.id: i for i, s in enumerate(STRATEGIES)}
 
@@ -192,11 +252,51 @@ def _new_session() -> requests.Session:
     return sess
 
 
-def _try_strategy(strat: Strategy, url: str,
-                  params: Optional[dict] = None,
-                  method: str = "GET",
-                  json_body: Optional[dict] = None,
-                  accept_json: bool = True) -> Optional[Any]:
+def _try_browser(strat: Strategy, url: str,
+                 params: Optional[dict] = None,
+                 accept_json: bool = True) -> Optional[Any]:
+    """Fetch via Playwright Chromium with Qrator auth."""
+    t0 = time.time()
+    try:
+        _ensure_qrator()
+        page = _QRATOR_PAGE
+
+        if params:
+            qs = "&".join(f"{k}={v}" for k, v in params.items())
+            full_url = f"{url}?{qs}"
+        else:
+            full_url = url
+
+        page.goto(full_url, wait_until="domcontentloaded", timeout=25000)
+
+        time.sleep(2)
+
+        if accept_json:
+            body_text = page.inner_text("body")
+            try:
+                return json.loads(body_text)
+            except json.JSONDecodeError:
+                pass
+            try:
+                result = page.evaluate("document.body.textContent")
+                return json.loads(result)
+            except Exception:
+                return None
+
+        content = page.content()
+        log.info(f"{strat.id} OK in {(time.time()-t0)*1000:.0f}ms")
+        return content
+
+    except Exception as e:
+        log.warning(f"{strat.id}: browser error: {e}")
+        return None
+
+
+def _try_curl(strat: Strategy, url: str,
+              params: Optional[dict] = None,
+              method: str = "GET",
+              json_body: Optional[dict] = None,
+              accept_json: bool = True) -> Optional[Any]:
     t0 = time.time()
     sess = _new_session()
     headers = strat.headers({"Accept": "application/json, text/html, */*"})
@@ -231,7 +331,18 @@ def _try_strategy(strat: Strategy, url: str,
             log.warning(f"{strat.id}: bad JSON: {e}")
             return None
 
+    log.info(f"{strat.id} OK in {(time.time()-t0)*1000:.0f}ms")
     return r.text
+
+
+def _try_strategy(strat: Strategy, url: str,
+                  params: Optional[dict] = None,
+                  method: str = "GET",
+                  json_body: Optional[dict] = None,
+                  accept_json: bool = True) -> Optional[Any]:
+    if strat.transport == "browser":
+        return _try_browser(strat, url, params, accept_json)
+    return _try_curl(strat, url, params, method, json_body, accept_json)
 
 
 def _fetch_with_rotation(url: str,
