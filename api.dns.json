@@ -1,0 +1,320 @@
+{
+  "name": "DNS-Shop API endpoints",
+  "version": "1.0",
+  "date": "2026-06-27",
+  "base_url": "https://www.dns-shop.ru",
+  "restapi_base": "https://restapi.dns-shop.ru",
+  "protection": "Qrator (JS challenge, блокирует прямые curl/requests)",
+  "auth_required": ["/v1/site/check-version", "/v1/get-user-profile"],
+  "endpoints": {
+    "restapi": {
+      "description": "Основное REST API DNS-Shop",
+      "base": "https://restapi.dns-shop.ru",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/v1/get-presearch",
+          "query": { "query": "string" },
+          "description": "Поисковые подсказки (автокомплит)",
+          "auth": false,
+          "response": "JSON"
+        },
+        {
+          "method": "GET",
+          "path": "/v2/get-city",
+          "description": "Определение города по IP",
+          "auth": false,
+          "response": {
+            "citySlug": "string",
+            "id": "uuid",
+            "name": "string"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/get-menu-header",
+          "query": { "shortMenu": "1" },
+          "description": "Меню шапки сайта",
+          "auth": false,
+          "response": "JSON с деревом меню"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/site/shorts/get-status",
+          "description": "Статус корзины и избранного",
+          "auth": false,
+          "response": { "status": "boolean" }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/get-wishlist-count",
+          "description": "Количество товаров в избранном",
+          "auth": false,
+          "response": "number"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/chat/config",
+          "description": "Конфигурация чата поддержки",
+          "auth": false,
+          "response": "JSON"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/get-search-logger-params",
+          "description": "Параметры для аналитики поиска",
+          "auth": false,
+          "response": "JSON"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/get-presearch-logger-params",
+          "description": "Параметры для аналитики пре-поиска",
+          "auth": false,
+          "response": "JSON"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/user-point-action-product-card",
+          "description": "Логирование действия на карточке товара",
+          "auth": false,
+          "response": true
+        },
+        {
+          "method": "POST",
+          "path": "/v1/user-point-action-search-page",
+          "description": "Логирование действия на странице поиска",
+          "auth": false,
+          "response": true
+        },
+        {
+          "method": "GET",
+          "path": "/v1/site/check-version",
+          "description": "Проверка версии сайта (требует токен)",
+          "auth": true,
+          "response": "401 без токена"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/get-user-profile",
+          "description": "Профиль пользователя (требует токен)",
+          "auth": true,
+          "response": "401 без токена"
+        }
+      ]
+    },
+    "pwa": {
+      "description": "PWA API — основной источник данных о товарах",
+      "base": "https://www.dns-shop.ru",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/pwa/pwa/get-product/",
+          "query": { "id": "uuid товара" },
+          "description": "ПОЛНАЯ ИНФОРМАЦИЯ О ТОВАРЕ: название, цена, характеристики, описание, рейтинг, изображение, гарантия, страна производства",
+          "auth": false,
+          "response": {
+            "guid": "uuid",
+            "code": "string (артикул)",
+            "name": "string",
+            "specs": "string (краткие хар-ки)",
+            "description": "string (описание)",
+            "price": "number (текущая цена)",
+            "bonus": "number",
+            "imageUrl": "string (URL изображения)",
+            "characteristics": "object (группированные характеристики)",
+            "topOpinion": "object (топ-отзыв)",
+            "rating": "number",
+            "manufacturerCountry": "string",
+            "monthWarranty": "number (месяцев гарантии)"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/load-multicard/{id}/",
+          "description": "Модификации/варианты товара (мультикарта)",
+          "auth": false,
+          "response": "JSON с вариантами продуктов"
+        }
+      ]
+    },
+    "catalog": {
+      "description": "Категории и фильтры",
+      "base": "https://www.dns-shop.ru",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/catalog/category/get-rsu-state/",
+          "description": "Состояние системы подбора ПК (RSU — сборка компьютера). Возвращает дерево категорий комплектующих с URL и ID",
+          "auth": false,
+          "response": "Категории: Процессор, Мат. плата, Блок питания, Корпус, Видеокарта, ОЗУ, Накопители, Кулер, Система охлаждения"
+        },
+        {
+          "method": "GET",
+          "path": "/catalog/category/get-virtual-categories-list/",
+          "query": { "guid": "uuid категории" },
+          "description": "Список виртуальных подкатегорий (recipe/подборки)",
+          "auth": false,
+          "response": "Маппинг URL -> название подборки"
+        },
+        {
+          "method": "GET",
+          "path": "/catalog/category/category-filters-new/",
+          "query": { "title_url": "string", "searchUid": "string" },
+          "description": "Фильтры для категории (магазины, параметры)",
+          "auth": false,
+          "response": "JSON с блоками фильтров"
+        },
+        {
+          "method": "GET",
+          "path": "/catalog/search/filters/",
+          "query": { "q": "поисковый запрос", "category": "uuid категории" },
+          "description": "Фильтры для поиска",
+          "auth": false,
+          "response": "JSON с блоками фильтров"
+        },
+        {
+          "method": "POST",
+          "path": "/catalog/compare/storage/",
+          "description": "Хранилище сравнения товаров",
+          "auth": false,
+          "response": { "products": [], "stamp": "number" }
+        }
+      ]
+    },
+    "ajax_state": {
+      "description": "Dynamic блоки страницы (ajax-state). Используются для подгрузки HTML-блоков на странице. POST-запросы с form-urlencoded или JSON телом",
+      "base": "https://www.dns-shop.ru/ajax-state",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/product-buy/",
+          "description": "Цена, рассрочка для товара (используется в списке товаров). Возвращает current/previous price, credit, primaryButton",
+          "auth": false,
+          "response_data": {
+            "id": "uuid",
+            "name": "string",
+            "price": { "current": "number", "previous": "number (опционально)" },
+            "credit": { "amount": "number", "period": "number" },
+            "hasHistory": "boolean"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/avails/",
+          "description": "Наличие товара в магазинах (HTML блок)",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/avails-container/",
+          "description": "Контейнер наличия (HTML блок)",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/delivery/",
+          "description": "Информация о доставке (HTML блок)",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/product-warranty/",
+          "description": "Информация о гарантии",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/buy-button/",
+          "description": "Кнопка покупки",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/wishlist-button/",
+          "description": "Кнопка избранного",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/voblers/",
+          "description": "Бейджи/воблеры на товаре",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/footer/",
+          "description": "Футер сайта",
+          "auth": false
+        },
+        {
+          "method": "POST",
+          "path": "/characteristics-description/",
+          "description": "Характеристики и описание (ajax-state блок)",
+          "auth": false
+        }
+      ]
+    },
+    "other": {
+      "description": "Прочие endpoint'ы",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "https://a.dns-shop.ru/footer/",
+          "description": "Микрофронтенд футера (JS/CSS)",
+          "auth": false
+        },
+        {
+          "method": "GET",
+          "path": "/pageNotification/page-notification/get-system-events/",
+          "description": "Системные уведомления",
+          "auth": false
+        },
+        {
+          "method": "GET",
+          "path": "https://user-events-notifier.dns-shop.ru/api/v1/site/groups",
+          "description": "Группы уведомлений пользователя",
+          "auth": false
+        },
+        {
+          "method": "GET",
+          "path": "/load-assets/",
+          "query": { "id": "string" },
+          "description": "Загрузка ассетов для компонентов",
+          "auth": false
+        }
+      ]
+    },
+    "internal_subdomains": {
+      "description": "Внутренние поддомены, найденные в коде Qrator",
+      "domains": [
+        "restapi.dns-shop.ru — REST API (основной)",
+        "webapi.dns-shop.ru — Web API (недоступен)",
+        "cart.dns-shop.ru — Корзина",
+        "shops.dns-shop.ru — Магазины (недоступен)",
+        "a.dns-shop.ru — Статика/микрофронтенды",
+        "chat.dns-shop.ru — Чат поддержки",
+        "analytics.dns-shop.ru — Аналитика",
+        "user-events-notifier.dns-shop.ru — Уведомления",
+        "o.dns-shop.ru — Оригинальные изображения",
+        "c.dns-shop.ru — Кешированные изображения"
+      ]
+    },
+    "scraping_strategy": {
+      "note": "Список товаров отдаётся через SSR (серверный рендеринг HTML). Прямого REST API для списка товаров нет.",
+      "steps": [
+        "1. Получить HTML страницы категории/поиска (через Selenium/Playwright из-за Qrator)",
+        "2. Извлечь из HTML ID товаров (data-guid атрибуты) и ссылки на товары",
+        "3. Для каждого товара: GET /pwa/pwa/get-product/?id={guid} — получить полную информацию",
+        "4. Для списка цен: POST /ajax-state/product-buy/ — получить цены всех товаров на странице",
+        "5. Для сборки ПК: GET /catalog/category/get-rsu-state/ — получить структуру категорий"
+      ],
+      "recommended_tools": [
+        "undetected-chromedriver (Python)",
+        "Playwright + playwright-stealth",
+        "puppeteer-extra-plugin-stealth (Node.js)"
+      ],
+      "note_qrator": "Qrator требует выполнения JS challenge. Обычные HTTP-клиенты (requests, curl) блокируются. Нужен headless browser с anti-detection."
+    }
+  }
+}
